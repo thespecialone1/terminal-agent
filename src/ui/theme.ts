@@ -5,5 +5,7 @@ export const theme = {
     plan: 'magenta',
     confirm: 'yellow',
     error: 'red',
+    userPrompt: 'green',
+    agentResponse: 'blue',
   },
 };

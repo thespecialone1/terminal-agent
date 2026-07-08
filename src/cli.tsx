@@ -75,11 +75,11 @@ const App = () => {
   React.useEffect(() => {
     const loaded = loadSession(state.activeSessionId);
     if (loaded && loaded.length > 0) {
-      dispatch({ type: 'ADD_CORE_MESSAGES', payload: loaded });
+      dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: state.activeSessionId, messages: loaded } });
     }
   }, []);
 
-  const activeSession = state.sessions.find(s => s.id === state.activeSessionId) || state.sessions[0];
+  const activeSession = (state.sessions.find(s => s.id === state.activeSessionId) || state.sessions[0])!;
   const isRunningRef = React.useRef(activeSession.isRunning);
   const lastCtrlTime = React.useRef(0);
   
@@ -105,11 +105,11 @@ const App = () => {
     }
     if (key.ctrl && key.upArrow) {
       const idx = state.sessions.findIndex(s => s.id === state.activeSessionId);
-      if (idx > 0) dispatch({ type: 'SWITCH_SESSION', payload: state.sessions[idx - 1].id });
+      if (idx > 0) dispatch({ type: 'SWITCH_SESSION', payload: state.sessions[idx - 1]!.id });
     }
     if (key.ctrl && key.downArrow) {
       const idx = state.sessions.findIndex(s => s.id === state.activeSessionId);
-      if (idx < state.sessions.length - 1) dispatch({ type: 'SWITCH_SESSION', payload: state.sessions[idx + 1].id });
+      if (idx < state.sessions.length - 1) dispatch({ type: 'SWITCH_SESSION', payload: state.sessions[idx + 1]!.id });
     }
     if (key.tab && state.activeMode === 'terminal' && state.input.startsWith('cd ')) {
       try {
@@ -125,11 +125,11 @@ const App = () => {
             .map(f => f.name);
             
           if (matches.length === 1) {
-             const completion = path.join(dirPath, matches[0]);
+             const completion = path.join(dirPath, matches[0]!);
              dispatch({ type: 'SET_INPUT', payload: `cd ${completion.startsWith('.') ? completion : './' + completion}` });
           } else if (matches.length > 1) {
              // Find common prefix (simplistic for now)
-             dispatch({ type: 'SET_INPUT', payload: `cd ${path.join(dirPath, matches[0])}` });
+             dispatch({ type: 'SET_INPUT', payload: `cd ${path.join(dirPath, matches[0]!)}` });
           }
         }
       } catch (e) {
@@ -155,12 +155,12 @@ const App = () => {
     try {
       const stream = streamChatResponse(messagesForAi, state.activeProvider, state.activeVariant);
       for await (const part of stream) {
-        if (part.type === 'reasoning') {
+        if ((part as any).type === 'reasoning') {
           if (!hasThought) {
             dispatch({ type: 'START_THINKING', payload: { sessionId: targetSessionId } });
             hasThought = true;
           }
-          dispatch({ type: 'APPEND_THOUGHT', payload: { sessionId: targetSessionId, text: part.textDelta || (part as any).text || (part as any).delta || '' } });
+          dispatch({ type: 'APPEND_THOUGHT', payload: { sessionId: targetSessionId, text: (part as any).textDelta || (part as any).text || (part as any).delta || '' } });
         } else if (part.type === 'text-delta') {
           // If we transition from native reasoning to text, stop thinking
           if (hasThought && !isInsideThinkTag) { // removed isThinking check to avoid stale state dependency here
@@ -218,17 +218,50 @@ const App = () => {
       dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: targetSessionId, messages: newMessages } });
 
       if (toolCalls && toolCalls.length > 0) {
-        const needsConfirmation = toolCalls.some(tc => tc.toolName === 'execute_command');
-        if (needsConfirmation) {
-          const commands = toolCalls
-            .filter(tc => tc.toolName === 'execute_command')
-            .map(tc => {
-               const args = (tc as any).args || (tc as any).input;
-               return `\`${args?.command || args}\``;
-            }).join(', ');
+        let requiresConfirmation = false;
+        const toolsRequiringConfirmation: string[] = [];
+        
+        for (const tc of toolCalls) {
+          const args = (tc as any).args || (tc as any).input || {};
+          
+          if (['read_file', 'list_dir', 'grep', 'change_directory', 'spawn_subagent'].includes(tc.toolName)) {
+            continue;
+          }
+          
+          if (tc.toolName === 'execute_command') {
+            const cmd = (args.command || '').trim();
+            if (/^(git status|git diff|git log|bun test|tsc --noEmit|ls|cat|find|grep)\b/.test(cmd)) {
+              continue;
+            }
+            if (/^(rm -rf|sudo|dd|git push --force)\b/.test(cmd) || cmd.includes('|')) {
+              requiresConfirmation = true;
+              toolsRequiringConfirmation.push(`\`${cmd}\``);
+              continue;
+            }
+            if (/^(git commit|bun add|npm install|mkdir)\b/.test(cmd)) {
+              if (!activeSession.approvedTier2Tools?.includes('execute_command')) {
+                requiresConfirmation = true;
+                toolsRequiringConfirmation.push(`\`${cmd}\``);
+              }
+              continue;
+            }
+            requiresConfirmation = true;
+            toolsRequiringConfirmation.push(`\`${cmd}\``);
+          } else if (tc.toolName === 'write_file') {
+            if (!activeSession.approvedTier2Tools?.includes('write_file')) {
+              requiresConfirmation = true;
+              toolsRequiringConfirmation.push(`\`write_file\` to ${args.path}`);
+            }
+          } else {
+             requiresConfirmation = true;
+             toolsRequiringConfirmation.push(`\`${tc.toolName}\``);
+          }
+        }
+
+        if (requiresConfirmation) {
           dispatch({ 
             type: 'REQUIRE_CONFIRMATION', 
-            payload: { prompt: `Agent wants to execute: ${commands}. Allow? (y/n)`, toolCalls, sessionId: targetSessionId } 
+            payload: { prompt: `Agent wants to execute: ${toolsRequiringConfirmation.join(', ')}. Allow? (y/n)`, toolCalls, sessionId: targetSessionId } 
           });
         } else {
           await executeToolsAndContinue(toolCalls, messagesForAi.concat(newMessages), targetSessionId);
@@ -246,6 +279,7 @@ const App = () => {
     const toolResults = [];
     
     for (const toolCall of toolCalls) {
+      dispatch({ type: 'SET_EXECUTING_TOOL', payload: { sessionId: targetSessionId, toolName: toolCall.toolName } });
       const args = (toolCall as any).args || (toolCall as any).input;
       
       if (toolCall.toolName === 'spawn_subagent') {
@@ -257,26 +291,36 @@ const App = () => {
         
         // Start background execution for the sub-agent
         processAIResponse([initMsg], newSessionId).then(() => {
-          // This will run in the background. We don't await it here.
-          // Wait, how does it report back?
-          // For now, it just runs. The user can switch to it.
+          const msg = { role: 'assistant' as const, content: `Sub-agent '${args.task_name}' has completed.` };
+          saveMessage(targetSessionId, 'assistant', msg.content);
+          dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: targetSessionId, messages: [msg] } });
+        }).catch((e) => {
+          const msg = { role: 'assistant' as const, content: `Sub-agent '${args.task_name}' failed: ${e.message}` };
+          saveMessage(targetSessionId, 'assistant', msg.content);
+          dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: targetSessionId, messages: [msg] } });
         });
         
         toolResults.push({
           type: 'tool-result',
           toolCallId: toolCall.toolCallId,
           toolName: toolCall.toolName,
-          output: { type: 'text', value: `Sub-agent spawned in session ${args.task_name}. Use Ctrl+T to view it.` },
+          result: `Sub-agent spawned in session ${args.task_name}. Use Ctrl+T to view it.`,
         });
       } else {
         const result = await executePendingTool(toolCall.toolName, args);
+        const resultStr = String(result);
+        const truncatedResult = resultStr.length > 4000 
+          ? resultStr.slice(0, 4000) + '\n...[truncated due to length]' 
+          : resultStr;
+          
         toolResults.push({
           type: 'tool-result',
           toolCallId: toolCall.toolCallId,
           toolName: toolCall.toolName,
-          output: { type: 'text', value: String(result) },
+          result: truncatedResult,
         });
       }
+      dispatch({ type: 'SET_EXECUTING_TOOL', payload: { sessionId: targetSessionId, toolName: null } });
     }
 
     const toolMessage = { role: 'tool' as const, content: toolResults };
@@ -318,9 +362,9 @@ const App = () => {
 
     if (currentInput.trim().startsWith('/session ')) {
       const parts = currentInput.trim().split(' ');
-      const num = parseInt(parts[1], 10);
+      const num = parseInt(parts[1] || '', 10);
       if (!isNaN(num) && num > 0 && num <= state.sessions.length) {
-        dispatch({ type: 'SWITCH_SESSION', payload: state.sessions[num - 1].id });
+        dispatch({ type: 'SWITCH_SESSION', payload: state.sessions[num - 1]!.id });
         dispatch({ type: 'SET_INPUT', payload: '' });
       }
       return;
@@ -334,8 +378,10 @@ const App = () => {
       const result = await executePendingTool('execute_command', { command: currentInput });
       const responseContent = String(result);
       
-      const toolMessage = { role: 'tool' as const, content: [{ type: 'tool-result', output: responseContent }] };
-      saveMessage(state.activeSessionId, 'tool', [{ type: 'tool-result', output: responseContent }]);
+      const dummyId = `cmd-${Date.now()}`;
+      const toolContent = [{ type: 'tool-result', toolCallId: dummyId, toolName: 'execute_command', result: responseContent }];
+      const toolMessage = { role: 'tool' as const, content: toolContent };
+      saveMessage(state.activeSessionId, 'tool', toolContent);
       dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: state.activeSessionId, messages: [toolMessage] } });
       dispatch({ type: 'SET_RUNNING', payload: { sessionId: state.activeSessionId, isRunning: false } });
     } else {
@@ -374,11 +420,14 @@ const App = () => {
 
       {/* Message List (Scrollable) */}
       <Box flexGrow={1} flexDirection="column-reverse" overflow="hidden" paddingX={1}>
-        {displayMessages.map((msg, idx) => (
-          <Box key={`msg-${msg.id || idx}`} flexDirection="column" marginBottom={1}>
-            <MessageView msg={msg} i={idx} />
-          </Box>
-        ))}
+        {displayMessages.map((msg: any, idx: number) => {
+          const keyId = msg.id ? String(msg.id) : String(idx);
+          return (
+            <Box key={`msg-${keyId}`} flexDirection="column" marginBottom={1}>
+              <MessageView msg={msg} i={idx} />
+            </Box>
+          );
+        })}
         {displayMessages.length === 0 && (
            <Box flexGrow={1} justifyContent="center" alignItems="center">
               <Text dimColor>No messages in this session yet.</Text>
@@ -406,9 +455,9 @@ const App = () => {
         paddingX={1} 
         flexDirection="column"
       >
-        {state.isConfirming && state.confirmPrompt ? (
+        {activeSession.isConfirming && activeSession.confirmPrompt ? (
             <ConfirmModal 
-            prompt={state.confirmPrompt}
+            prompt={activeSession.confirmPrompt}
             onConfirm={async () => {
               dispatch({ type: 'CONFIRM' });
               if (activeSession.pendingToolCalls) {
@@ -418,12 +467,15 @@ const App = () => {
             onCancel={async () => {
               dispatch({ type: 'CANCEL_CONFIRM' });
               if (activeSession.pendingToolCalls) {
-                const toolResults = activeSession.pendingToolCalls.map((tc: any) => ({
-                  type: 'tool-result' as const,
-                  toolCallId: tc.toolCallId,
-                  toolName: tc.toolName,
-                  output: { type: 'text', value: 'User denied execution of this tool.' },
-                }));
+                const toolResults: any[] = [];
+                activeSession.pendingToolCalls.forEach((tc: any) => {
+                  toolResults.push({
+                    type: 'tool-result',
+                    toolCallId: tc.toolCallId,
+                    toolName: tc.toolName,
+                    result: 'User denied execution of this tool.',
+                  });
+                });
                 const toolMessage = { role: 'tool' as const, content: toolResults };
                 saveMessage(state.activeSessionId, 'tool', toolResults);
                 dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: state.activeSessionId, messages: [toolMessage] } });
@@ -442,8 +494,14 @@ const App = () => {
               <Box flexDirection="column" marginBottom={1}>
                 {activeSession.isThinking && (
                   <Box flexDirection="row">
-                    <Text color="cyan"><Spinner type="dots" /> </Text>
+                    <Text color="cyan"><Spinner type="boxBounce" /> </Text>
                     <Text color="cyan">Agent is thinking...</Text>
+                  </Box>
+                )}
+                {activeSession.executingTool && (
+                  <Box flexDirection="row">
+                    <Text color="magenta"><Spinner type="dots8Bit" /> </Text>
+                    <Text color="magenta">Agent is executing {activeSession.executingTool}...</Text>
                   </Box>
                 )}
                 {activeSession.currentResponse && (
@@ -457,11 +515,6 @@ const App = () => {
             <InputBar 
               value={state.input} 
               onChange={(val) => {
-                // If a ctrl key was just pressed, ink-text-input might still try to append the character. 
-                // We completely ignore any input changes within 150ms of a ctrl key press.
-                if (Date.now() - lastCtrlTime.current < 150) {
-                  return;
-                }
                 dispatch({ type: 'SET_INPUT', payload: val });
               }}
               onSubmit={handleSubmit}

@@ -23,4 +23,5 @@ export type AppAction =
   | { type: 'SWITCH_SESSION'; payload: string }
   | { type: 'TOGGLE_SESSION_MENU'; payload: boolean }
   | { type: 'SCROLL_UP'; payload: number }
-  | { type: 'SCROLL_DOWN'; payload: number };
+  | { type: 'SCROLL_DOWN'; payload: number }
+  | { type: 'SET_EXECUTING_TOOL'; payload: { sessionId: string; toolName: string | null } };

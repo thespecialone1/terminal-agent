@@ -58,7 +58,7 @@ export const ProviderMenu: React.FC<ProviderMenuProps> = ({ onComplete, onCancel
         setSelectedVariantIndex(Math.min(variants.length - 1, selectedVariantIndex + 1));
       } else if (key.return) {
         const provider = activeProviderKey;
-        const variant = variants[selectedVariantIndex];
+        const variant = variants[selectedVariantIndex]!;
         
         // Check if API key exists
         const existingKey = getApiKey(provider);
@@ -79,7 +79,7 @@ export const ProviderMenu: React.FC<ProviderMenuProps> = ({ onComplete, onCancel
   const handleApiKeySubmit = () => {
     if (apiKeyInput.trim()) {
       const provider = activeProviderKey;
-      const variant = variants[selectedVariantIndex];
+      const variant = variants[selectedVariantIndex]!;
       saveApiKey(provider, apiKeyInput.trim());
       saveActiveProvider(provider);
       saveActiveVariant(variant);
@@ -105,13 +105,15 @@ export const ProviderMenu: React.FC<ProviderMenuProps> = ({ onComplete, onCancel
         width={60}
         backgroundColor="black"
       >
-        <Text bold color={theme.colors.plan} marginBottom={1}>
-          Model Selection
-        </Text>
+        <Box marginBottom={1}>
+        <Text bold color="cyanBright">1. Select Provider</Text>
+      </Box>
 
         {step === 'PROVIDER' && (
           <Box flexDirection="column">
-            <Text color="gray" marginBottom={1}>Select a provider (Up/Down, Enter):</Text>
+            <Box marginBottom={1}>
+              <Text color="gray">Select a provider (Up/Down, Enter):</Text>
+            </Box>
             {providerKeys.map((pKey, idx) => (
               <Text key={pKey} color={idx === selectedProviderIndex ? 'green' : 'white'}>
                 {idx === selectedProviderIndex ? '❯ ' : '  '}
@@ -123,7 +125,9 @@ export const ProviderMenu: React.FC<ProviderMenuProps> = ({ onComplete, onCancel
 
         {step === 'VARIANT' && (
           <Box flexDirection="column">
-            <Text color="gray" marginBottom={1}>Select {PROVIDERS[activeProviderKey].name} variant:</Text>
+            <Box marginBottom={1}>
+              <Text color="gray">Select {PROVIDERS[activeProviderKey].name} variant:</Text>
+            </Box>
             {variants.map((v, idx) => (
               <Text key={v} color={idx === selectedVariantIndex ? 'green' : 'white'}>
                 {idx === selectedVariantIndex ? '❯ ' : '  '}
@@ -138,9 +142,11 @@ export const ProviderMenu: React.FC<ProviderMenuProps> = ({ onComplete, onCancel
 
         {step === 'API_KEY' && (
           <Box flexDirection="column">
-            <Text color="yellow" marginBottom={1}>
-              API Key required for {PROVIDERS[activeProviderKey].name}.
-            </Text>
+            <Box marginBottom={1}>
+          <Text color="gray">
+            API key required in ~/.terminal-agent/config.json
+          </Text>
+        </Box>
             <Box flexDirection="row">
               <Text>Key: </Text>
               <TextInput 

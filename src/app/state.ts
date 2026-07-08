@@ -11,6 +11,10 @@ export interface Session {
   isRunning: boolean;
   pendingToolCalls: any[] | null;
   scrollOffset: number;
+  isConfirming: boolean;
+  confirmPrompt: string | null;
+  approvedTier2Tools: string[];
+  executingTool: string | null;
 }
 
 export interface AppState {
@@ -19,8 +23,6 @@ export interface AppState {
   
   // global UI state
   input: string;
-  isConfirming: boolean;
-  confirmPrompt: string | null;
   activeProvider: string;
   activeMode: 'agent' | 'terminal';
   activeVariant: string;
@@ -44,12 +46,14 @@ export const initialState: AppState = {
       isRunning: false,
       pendingToolCalls: null,
       scrollOffset: 0,
+      isConfirming: false,
+      confirmPrompt: null,
+      approvedTier2Tools: [],
+      executingTool: null,
     }
   ],
   activeSessionId: defaultSessionId,
   input: '',
-  isConfirming: false,
-  confirmPrompt: null,
   activeProvider: 'deepseek',
   activeMode: 'agent',
   activeVariant: 'deepseek-chat',

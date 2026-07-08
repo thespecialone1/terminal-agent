@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import TextInput from 'ink-text-input';
+import { TextInput } from './TextInput.tsx';
 import { theme } from './theme.ts';
 
 interface InputBarProps {

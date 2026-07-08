@@ -1,10 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execa } from 'execa';
 import fs from 'node:fs/promises';
-
-const execAsync = promisify(exec);
 
 // We remove the `execute` function from ALL tools to prevent the AI SDK from auto-executing them.
 // This allows us to fully control execution in `cli.tsx` (e.g. for confirmation modals).
@@ -21,6 +18,21 @@ export const agentTools = {
     parameters: z.object({
       path: z.string().describe('The absolute or relative path to the file to write'),
       content: z.string().describe('The content to write to the file'),
+    }),
+  } as any),
+  
+  list_dir: tool({
+    description: 'List the contents of a directory.',
+    parameters: z.object({
+      path: z.string().optional().describe('The absolute or relative path to the directory (defaults to current dir)'),
+    }),
+  } as any),
+  
+  grep: tool({
+    description: 'Search for a pattern in files using grep.',
+    parameters: z.object({
+      pattern: z.string().describe('The regex pattern to search for'),
+      path: z.string().optional().describe('The path to search in (defaults to current directory)'),
     }),
   } as any),
   
@@ -63,6 +75,22 @@ export async function executePendingTool(toolName: string, args: any): Promise<s
       } catch (e) {
         return `Failed to change directory: ${e instanceof Error ? e.message : String(e)}`;
       }
+    } else if (toolName === 'list_dir') {
+      try {
+        const targetPath = args.path || '.';
+        const entries = await fs.readdir(targetPath, { withFileTypes: true });
+        return entries.map(e => `${e.isDirectory() ? '[DIR] ' : '[FILE] '}${e.name}`).join('\n');
+      } catch (e) {
+        return `Failed to list directory: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    } else if (toolName === 'grep') {
+      try {
+        const targetPath = args.path || '.';
+        const { stdout } = await execa('grep', ['-rnI', args.pattern, targetPath], { reject: false });
+        return stdout || 'No matches found.';
+      } catch (e) {
+        return `Failed to run grep: ${e instanceof Error ? e.message : String(e)}`;
+      }
     } else if (toolName === 'execute_command') {
       const cmd = args.command.trim();
       
@@ -85,23 +113,26 @@ export async function executePendingTool(toolName: string, args: any): Promise<s
           process.stdin.pause();
         }
 
-        const child = require('node:child_process').spawn(cmd, { 
-          shell: true, 
+        const child = execa('sh', ['-c', cmd], { 
           stdio: ['inherit', 'pipe', 'pipe'],
           cwd: process.cwd()
         });
 
         let output = '';
         
-        child.stdout.on('data', (data: any) => {
-          output += data;
-          process.stdout.write(data);
-        });
+        if (child.stdout) {
+          child.stdout.on('data', (data: any) => {
+            output += data;
+            process.stdout.write(data);
+          });
+        }
         
-        child.stderr.on('data', (data: any) => {
-          output += data;
-          process.stderr.write(data);
-        });
+        if (child.stderr) {
+          child.stderr.on('data', (data: any) => {
+            output += data;
+            process.stderr.write(data);
+          });
+        }
 
         const onFinish = (code: number) => {
           // Resume TUI and input capture
@@ -113,10 +144,8 @@ export async function executePendingTool(toolName: string, args: any): Promise<s
           resolve(output || `Command exited with code ${code}`);
         };
 
-        child.on('close', onFinish);
-        child.on('error', (err: any) => {
-          onFinish(1);
-          resolve(`Error: ${err.message}`);
+        child.then(() => onFinish(0)).catch((err: any) => {
+          onFinish(err.exitCode || 1);
         });
       });
     }

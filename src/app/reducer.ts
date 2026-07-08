@@ -40,6 +40,10 @@ export function appReducer(state: AppState = initialState, action: AppAction): A
         isRunning: false,
         pendingToolCalls: null,
         scrollOffset: 0,
+        isConfirming: false,
+        confirmPrompt: null,
+        approvedTier2Tools: [],
+        executingTool: null,
       };
       return {
         ...state,
@@ -55,6 +59,11 @@ export function appReducer(state: AppState = initialState, action: AppAction): A
     case 'SCROLL_DOWN':
       return updateActiveSession(s => ({
         scrollOffset: s.scrollOffset + action.payload
+      }));
+
+    case 'SET_EXECUTING_TOOL':
+      return updateSession(action.payload.sessionId, s => ({
+        executingTool: action.payload.toolName
       }));
 
     case 'TOGGLE_THOUGHT_VISIBILITY':
@@ -106,33 +115,31 @@ export function appReducer(state: AppState = initialState, action: AppAction): A
         messages: [...s.messages, ...action.payload.messages],
       }));
 
-    case 'REQUIRE_CONFIRMATION': {
-      const updatedState = updateSession(action.payload.sessionId, () => ({
+    case 'REQUIRE_CONFIRMATION':
+      return updateSession(action.payload.sessionId, () => ({
         pendingToolCalls: action.payload.toolCalls,
-      }));
-      return {
-        ...updatedState,
         isConfirming: true,
         confirmPrompt: action.payload.prompt,
-      };
-    }
+      }));
       
     case 'CONFIRM':
-      return {
-        ...state,
+      return updateActiveSession(s => ({
         isConfirming: false,
         confirmPrompt: null,
-      };
+        // Mark these tools as approved for this session
+        approvedTier2Tools: [
+          ...s.approvedTier2Tools, 
+          ...(s.pendingToolCalls || []).map((tc: any) => tc.toolName)
+        ]
+      }));
 
     case 'CANCEL_CONFIRM':
-      return {
-        ...state,
+      return updateActiveSession(() => ({
         isConfirming: false,
         confirmPrompt: null,
-        sessions: state.sessions.map(s => 
-          s.id === state.activeSessionId ? { ...s, pendingToolCalls: null, isRunning: false } : s
-        )
-      };
+        pendingToolCalls: null,
+        isRunning: false
+      }));
 
     case 'SET_PROVIDER':
       return { ...state, activeProvider: action.payload };
