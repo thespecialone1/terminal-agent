@@ -200,7 +200,12 @@ const App = () => {
             finalResponseText += text;
           }
         } else if (part.type === 'tool-call') {
-          toolCalls.push(part);
+          toolCalls.push({
+            type: 'tool-call',
+            toolCallId: (part as any).toolCallId,
+            toolName: (part as any).toolName,
+            args: (part as any).args || (part as any).input || {}
+          });
         } else if (part.type === 'finish') {
           if (hasThought) {
             dispatch({ type: 'STOP_THINKING', payload: { sessionId: targetSessionId, timeMs: Math.round((performance.now() - thoughtStartTime) / 1000) } });

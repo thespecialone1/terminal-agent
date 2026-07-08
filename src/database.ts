@@ -58,6 +58,18 @@ export function loadSession(sessionId: string): any[] {
     }
   }
   
+  // Post-process to fix old input vs args zod validation issues
+  messages.forEach(msg => {
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      msg.content.forEach((c: any) => {
+        if (c.type === 'tool-call' && !c.args && c.input) {
+          c.args = c.input;
+          delete c.input;
+        }
+      });
+    }
+  });
+  
   return messages;
 }
 
