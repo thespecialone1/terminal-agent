@@ -385,11 +385,10 @@ const App = () => {
       const result = await executePendingTool('execute_command', { command: currentInput });
       const responseContent = String(result);
       
-      const dummyId = `cmd-${Date.now()}`;
-      const toolContent = [{ type: 'tool-result', toolCallId: dummyId, toolName: 'execute_command', result: responseContent }];
-      const toolMessage = { role: 'tool' as const, content: toolContent };
-      saveMessage(state.activeSessionId, 'tool', toolContent);
-      dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: state.activeSessionId, messages: [toolMessage] } });
+      const textContent = `> ${currentInput}\n\n${responseContent}`;
+      const sysMessage = { role: 'assistant' as const, content: textContent };
+      saveMessage(state.activeSessionId, 'assistant', textContent);
+      dispatch({ type: 'ADD_CORE_MESSAGES', payload: { sessionId: state.activeSessionId, messages: [sysMessage] } });
       dispatch({ type: 'SET_RUNNING', payload: { sessionId: state.activeSessionId, isRunning: false } });
     } else {
       const messagesForAi = [
@@ -406,19 +405,6 @@ const App = () => {
 
   return (
     <Box flexDirection="column">
-      {/* Header Pane */}
-      <Box 
-        paddingX={1}
-        flexDirection="row"
-        justifyContent="space-between"
-      >
-        <Box flexDirection="row">
-          <Text bold color={theme.colors.plan}>Terminal Agent [{activeSession.name}]</Text>
-          <Text color="cyanBright"> | Mode: </Text>
-          <Text color={state.activeMode === 'terminal' ? 'green' : 'magenta'} bold>{state.activeMode.toUpperCase()}</Text>
-        </Box>
-        <Text color="white">Provider: {state.activeProvider}</Text>
-      </Box>
 
       {/* Message List (Static Linear Output) */}
       <Static items={displayMessages.map((m, i) => ({ ...m, uniqueId: String(m.id || i) }))}>
@@ -447,8 +433,18 @@ const App = () => {
         borderStyle="single" 
         borderColor="gray" 
         paddingX={1} 
+        paddingY={0}
         flexDirection="column"
       >
+        <Box flexDirection="row" justifyContent="space-between" marginBottom={1}>
+          <Text bold color={theme.colors.plan}>Terminal Agent [{activeSession.name}]</Text>
+          <Box flexDirection="row">
+            <Text dimColor>Mode: </Text>
+            <Text color={state.activeMode === 'terminal' ? 'green' : 'magenta'} bold>{state.activeMode.toUpperCase()}</Text>
+            <Text dimColor> | Provider: {state.activeProvider}</Text>
+          </Box>
+        </Box>
+        
         {activeSession.isConfirming && activeSession.confirmPrompt ? (
             <ConfirmModal 
             prompt={activeSession.confirmPrompt}
@@ -532,12 +528,6 @@ const App = () => {
       </Box>
   );
 };
-
-// Start the app
-process.stdout.write('\x1b[?1049h');
-process.on('exit', () => {
-  process.stdout.write('\x1b[?1049l');
-});
 
 const { waitUntilExit } = render(<App />);
 
