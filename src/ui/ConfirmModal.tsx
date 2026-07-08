@@ -24,12 +24,9 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({ prompt, onConfirm, o
   });
 
   return (
-    <Box borderStyle="round" borderColor={theme.colors.confirm} padding={1} flexDirection="column">
-      <Text color={theme.colors.confirm} bold>CONFIRMATION REQUIRED</Text>
-      <Box marginY={1}>
-        <Text>{prompt}</Text>
-      </Box>
-      <Text dimColor>(y/enter to confirm, n/esc to cancel)</Text>
+    <Box flexDirection="row" paddingY={0} paddingX={1}>
+      <Text color="yellow" bold>⚠️  CONFIRMATION REQUIRED: </Text>
+      <Text>{prompt}</Text>
     </Box>
   );
 };

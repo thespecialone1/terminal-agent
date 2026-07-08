@@ -22,7 +22,7 @@ import path from 'path';
 const MessageView = ({ msg, i }: { msg: any; i: number }) => {
   const parts = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }];
   return (
-    <Box key={i} flexDirection="row" marginBottom={1} flexShrink={0} width="100%">
+    <Box key={i} flexDirection="row" marginBottom={0} flexShrink={0} width="100%">
       <Box width={10} flexShrink={0}>
         <Text color={msg.role === 'user' ? theme.colors.userPrompt : theme.colors.agentResponse} bold>
           {msg.role === 'user' ? 'You:' : msg.role === 'tool' ? 'System:' : 'Agent:'}
@@ -40,19 +40,26 @@ const MessageView = ({ msg, i }: { msg: any; i: number }) => {
             );
           } else if (part.type === 'tool-call') {
             return (
-              <Box key={pIdx} borderStyle="round" borderColor="yellow" paddingX={1} marginTop={1} width="100%">
+              <Box key={pIdx} paddingLeft={1} width="100%">
                 <Text color="yellow" wrap="wrap">
-                  ⚡ Running: {part.toolName} {JSON.stringify(part.args || {})}
+                  ⚙️  {part.toolName} {JSON.stringify(part.args || {})}
                 </Text>
               </Box>
             );
           } else if (part.type === 'tool-result') {
             const resVal = part.result !== undefined ? part.result : (part.output?.value || part.output);
             const resultStr = typeof resVal === 'string' ? resVal : JSON.stringify(resVal);
+            
+            // Heavily truncate tool output to max 3 lines for a sleek look
+            const lines = resultStr.split('\n');
+            const truncatedLines = lines.slice(0, 3).join('\n');
+            const hiddenCount = lines.length - 3;
+            
             return (
-              <Box key={pIdx} borderStyle="round" borderColor="gray" paddingX={1} marginTop={1} width="100%">
+              <Box key={pIdx} paddingLeft={1} width="100%">
                 <Text dimColor wrap="wrap">
-                  {resultStr.slice(0, 1000)}{resultStr.length > 1000 ? '\n...[truncated]' : ''}
+                  {truncatedLines}
+                  {hiddenCount > 0 ? `\n... [${hiddenCount} more lines hidden]` : ''}
                 </Text>
               </Box>
             );
@@ -393,19 +400,14 @@ const App = () => {
     }
   };
 
-  const [columns, rows] = useStdoutDimensions();
-
-  // Reverse messages for bottom-up layout, apply scroll offset
-  const displayMessages = [...activeSession.messages]
-    .reverse()
-    .slice(activeSession.scrollOffset);
+  // We don't need useStdoutDimensions or scrollOffset for Static layout
+  // We just render messages in a standard top-down flow
+  const displayMessages = [...activeSession.messages];
 
   return (
-    <Box width={columns} height={rows} flexDirection="column">
+    <Box flexDirection="column">
       {/* Header Pane */}
       <Box 
-        borderStyle="single" 
-        borderColor={theme.colors.plan}
         paddingX={1}
         flexDirection="row"
         justifyContent="space-between"
@@ -418,26 +420,18 @@ const App = () => {
         <Text color="white">Provider: {state.activeProvider}</Text>
       </Box>
 
-      {/* Message List (Scrollable) */}
-      <Box flexGrow={1} flexDirection="column-reverse" overflow="hidden" paddingX={1}>
-        {displayMessages.map((msg: any, idx: number) => {
-          const keyId = msg.id ? String(msg.id) : String(idx);
-          return (
-            <Box key={`msg-${keyId}`} flexDirection="column" marginBottom={1}>
-              <MessageView msg={msg} i={idx} />
-            </Box>
-          );
-        })}
-        {displayMessages.length === 0 && (
-           <Box flexGrow={1} justifyContent="center" alignItems="center">
-              <Text dimColor>No messages in this session yet.</Text>
-           </Box>
+      {/* Message List (Static Linear Output) */}
+      <Static items={displayMessages.map((m, i) => ({ ...m, uniqueId: String(m.id || i) }))}>
+        {(msg: any) => (
+          <Box key={`msg-${msg.uniqueId}`} flexDirection="column" marginBottom={1}>
+            <MessageView msg={msg} i={parseInt(msg.uniqueId)} />
+          </Box>
         )}
-      </Box>
+      </Static>
 
       {/* Session Menu Popup */}
       {state.isSessionMenuOpen && (
-         <Box borderStyle="round" borderColor="blue" paddingX={1} flexDirection="column" marginBottom={0}>
+         <Box paddingX={1} flexDirection="column" marginBottom={0}>
            <Text color="blue" bold>Select Session (Current: {activeSession.name})</Text>
            {state.sessions.map((s, i) => (
               <Text key={s.id} color={s.id === state.activeSessionId ? 'green' : 'gray'}>
