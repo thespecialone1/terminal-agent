@@ -31,10 +31,34 @@ export function loadSession(sessionId: string): any[] {
   const query = db.query('SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC');
   const results = query.all() as { role: string, content: string }[];
   
-  return results.map(row => ({
-    role: row.role,
-    content: JSON.parse(row.content)
-  }));
+  const messages: any[] = [];
+  
+  for (const row of results) {
+    try {
+      const content = JSON.parse(row.content);
+      
+      // Sanitize broken tool messages from old terminal mode bug to prevent Vercel AI SDK Zod crashes
+      if (row.role === 'tool') {
+        const lastMsg = messages[messages.length - 1];
+        const hasMatchingCall = lastMsg?.role === 'assistant' && 
+                                Array.isArray(lastMsg.content) && 
+                                lastMsg.content.some((c: any) => c.type === 'tool-call');
+                                
+        if (!hasMatchingCall) {
+           // Convert broken tool result to a generic assistant message
+           const textResult = Array.isArray(content) ? content.map(c => c.result || '').join('\n') : String(content);
+           messages.push({ role: 'assistant', content: `> Legacy Terminal Command\n${textResult}` });
+           continue;
+        }
+      }
+      
+      messages.push({ role: row.role, content });
+    } catch (e) {
+      console.error('Failed to parse message content', e);
+    }
+  }
+  
+  return messages;
 }
 
 export function clearSession(sessionId: string) {

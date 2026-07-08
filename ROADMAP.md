@@ -4,11 +4,7 @@ Check this before starting work. Update it as part of the same change that finis
 
 ## Now — fix before adding anything new
 
-- [ ] `write_file` auto-runs with zero confirmation. Move it to tier-2 (`ARCHITECTURE.md` §2).
-- [ ] `isConfirming` / `confirmPrompt` are global state, not per-session — a background sub-agent can hijack the modal for whichever session the user is currently viewing (`EDGE_CASES.md`).
-- [ ] `theme.colors.userPrompt` / `theme.colors.agentResponse` don't exist in `theme.ts` — message labels render uncolored.
-- [ ] `spawn_subagent`'s detached promise has no `.catch()` and no result channel back to the parent session.
-- [ ] Tool results are sent to the model with no size cap or compaction — unbounded context growth on any session with a large file read or command output.
+*(All items in this section have been resolved and moved to CHANGELOG.md!)*
 
 ## Next — the gaps that prompted this doc
 
@@ -30,4 +26,8 @@ Check this before starting work. Update it as part of the same change that finis
 
 ## Done
 
-Nothing yet — the first completed item moves here with a date and a one-line summary. The same change, with more detail, goes in `CHANGELOG.md`.
+- 2026-07-08: Fixed `write_file` auto-run by gating it behind Tier-2 confirmation logic.
+- 2026-07-08: Scoped `isConfirming` and `confirmPrompt` to per-session state to fix background agent UI hijacking.
+- 2026-07-08: Added `userPrompt` and `agentResponse` colors to `theme.ts`.
+- 2026-07-08: Added `.catch()` block and parent-session result channel to `spawn_subagent`.
+- 2026-07-08: Capped tool results to 4000 characters before sending to the model to prevent unbounded context growth.

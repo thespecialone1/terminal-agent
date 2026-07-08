@@ -12,9 +12,12 @@ All notable changes to this project will be documented in this file.
 - **Context Truncation**: Truncated overly large tool output responses before appending them to the session history to avoid blowing out context windows.
 - **Full-Screen TUI Environment**: Implemented a single-column, full-screen Terminal User Interface (TUI) using Ink.
 - **Alternate Screen Buffer**: Application seamlessly takes over the terminal window (`\x1b[?1049h`) and restores previous terminal history upon exit (`\x1b[?1049l`).
+- **Interactive UI Updates**: Added real-time rendering of execution status, active modes, and provider info to the input pane.
 - **Path Autocompletion**: Added filesystem autocompletion triggered by the `Tab` key when typing `cd ` commands.
 - **SQLite Session Management**: Implemented persistent chat and tool execution sessions stored in `sessions.sqlite`.
 - **Shortcut Commands**: Added hotkeys for toggling modes (`Ctrl+O`), opening provider menus (`Ctrl+P`), managing sessions (`Ctrl+T`), and navigating history.
+- **`userPrompt` and `agentResponse` colors**: Added missing theme colors to `theme.ts`.
+- **Sub-agent robustness**: Added `.catch()` block and parent-session result channel to `spawn_subagent`.
 
 ### Changed
 - **System Prompt Refactor**: Greatly expanded the `chat.ts` system prompt to thoroughly ground the agent in the `Action -> Observation -> Action` loop.

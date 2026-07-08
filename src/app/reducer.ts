@@ -181,8 +181,6 @@ export function appReducer(state: AppState = initialState, action: AppAction): A
         currentResponse: s.currentResponse + action.payload.text,
       }));
 
-    case 'TOGGLE_THOUGHT_VISIBILITY':
-      return state;
 
     case 'RESET_STREAM_STATE':
       return updateSession(action.payload.sessionId, () => ({
